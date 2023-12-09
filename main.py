@@ -3,10 +3,12 @@ import numpy as np
 from numpy import sin,cos,tan,arcsin,arccos,arctan,pi
 from math import sqrt
 import sys
+import os
+import time
 
 GLOBAL_SUN_LOCATION = np.array([0,0,0])
 earthLocation = np.array([1,1,0])
-
+TIMESCALE = 5 #represents days per second
 
 class Sun():
     def __init__(self, location, diameter=None):
@@ -20,10 +22,21 @@ class Planet():
 
     def setLocationByCartesian(self,location):
         self.location = location
+        self.angle = arctan(location[1]/location[0])
+        self.radius = np.linalg.norm(location)
+
 
     def setLocationByPolar(self,axis,radius,startingAngle=0):
+        self.axis = axis
+        self.radius = radius
+        self.angle = startingAngle
+        self.location = np.array([radius*cos(startingAngle),radius*sin(startingAngle),0])
         #could be used later to make simulation the revolution around the sun easier
-        pass
+
+    def revolve(self,angularDistance):
+        self.angle += angularDistance
+        self.location = np.array([self.radius*cos(self.angle),self.radius*sin(self.angle),0])
+
 
 
 
@@ -51,26 +64,27 @@ def unitizeVector(a):
 
 
 class POV():
-
-
     def __init__(self,object,eigenMatrix):
         self.object = object
         self.eigenMatrix = eigenMatrix
 
-    def rotateDegree(self,axis):
+    def rotate(self,axis,angularDistance):
         rotFunc = getRotationMatrixFunction(axis)
-        self.eigenMatrix = np.linalg.inv(rotFunc(pi/180) @ np.linalg.inv(self.eigenMatrix))
+        #self.eigenMatrix = np.linalg.inv(rotFunc(pi/180) @ np.linalg.inv(self.eigenMatrix))
+        self.eigenMatrix @= rotFunc(angularDistance)
+
 
     def getCoordinates(self):
         #change of basis to use our basis vectors
         #project new vectors to spherical coordinates
         #project spherical coordinates back to plane
         loc = sun.location - self.object.location
-        # print(loc)
+        #print("Relative location:",loc)
+        #print("Eigenmatrix:",self.eigenMatrix)
         # print(self.eigenMatrix)
-        # print(np.linalg.inv(self.eigenMatrix))
-        locNewBasis = np.linalg.inv(self.eigenMatrix) @ loc
-        #print(locNewBasis)
+        #print(np.linalg.inv(self.eigenMatrix))
+        locNewBasis = np.linalg.inv(np.transpose(self.eigenMatrix)) @ loc
+        #print("Relative location in new coordinates:",locNewBasis)
         r = np.linalg.norm(locNewBasis)
         
         x,y,z = locNewBasis[0],locNewBasis[1],locNewBasis[2]
@@ -95,7 +109,7 @@ class POV():
             else:
                 theta = -pi/2
 
-        print("ANGLES: ",phi,theta)
+        #print("ANGLES: ",theta*180/pi,phi*180/pi)
         ret = np.array([cos(theta)*sin(phi),cos(phi)])
         return ret,(sin(theta) > 0)
 
@@ -112,9 +126,9 @@ class POV():
         # return [sun_x,sun_y]
 
 
-view = POV(earth,np.array([[0,-1,0],
-                           [1,0,0],
-                           [0,0,1]]))
+view = POV(earth,np.array([[-1.0,0,0],
+                           [0,0,1.0],
+                           [0,1.0,0]]))
 # test = np.array([[1.0,1.0,0.0],
 #                  [0.0,1.0,0.0]])
 # rotFunc = getRotationMatrixFunction([0,0,1])
@@ -137,9 +151,9 @@ screen = pygame.display.set_mode((width - 100, height-100))
 pygame.display.set_caption("My Animation")
 
 # Set up colors
-black = (0, 0, 0)
+black = (50, 170, 220)
 white = (255, 255, 255)
-
+x = 0
 # Main game loop
 while True:
     for event in pygame.event.get():
@@ -150,8 +164,16 @@ while True:
     # Clear the screen
     screen.fill(black)
 
-    rotationAxis = np.array([-100,-100,20])
-    view.rotateDegree(unitizeVector(rotationAxis))
+    rotationAxis = np.array([0,0.4,1])
+    x += 1
+    if x % 24 == 0:
+        #time.sleep(10000)
+        print("Day ",x//24)
+        print("Location:",earth.location)
+    if x % (366*24+1) == 0:
+        print("About year",x//366)
+    view.rotate(unitizeVector(rotationAxis),TIMESCALE/24)
+    earth.revolve(TIMESCALE/(366.24*24))
     coords,valid = view.getCoordinates()
     coords = coords * np.array([width//2,height//2]) + np.array([(width-100)//2,(height-100)//2])
     sun_x,sun_y = coords
